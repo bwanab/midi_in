@@ -3,7 +3,7 @@
 
 * MidiIn
 
-An abstraction layer built on ex_portmidi
+An abstraction layer built on [[https://github.com/bwanab/ex-portmidi][ex_portmidi]].
 
 * Installation
 
@@ -11,9 +11,9 @@ Clone the repository for now.
 
 * Usage
 
-This is built at present to serve midi for Modsynth which is a supercollider client, so supercollider is needed. It should work for other sound generators, but hasn't been tested.
+This is built at present to serve midi for Modsynth which is a supercollider client, so [[https://supercollider.github.io/][supercollider]] is needed. It should work for other sound generators, but hasn't been tested.
 
-Assuming you've got supercollider installed and running, for this demo, you'll need the [https://github.com/bwanab/sc_em][Sc_Em project].
+Assuming you've got supercollider installed and running, for this demo, you'll need the [[https://github.com/bwanab/sc_em][Sc_Em project]].
 
 Assuming you've got both supercollider and sc_em, let's assume you've created the following SynthDef on supercollider:
 
