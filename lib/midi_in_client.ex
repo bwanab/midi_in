@@ -7,7 +7,7 @@ defmodule MidiInClient do
     GenServer.call(MidiIn, {:register_cc, cc_num, cc, control})
   end
 
-  def stop_midi(pid) do
-    GenServer.call(MidiIn, {:stop_midi, pid})
+  def stop_midi() do
+    GenServer.call(MidiIn, :stop_midi)
   end
 end

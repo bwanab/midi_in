@@ -86,7 +86,7 @@ defmodule MidiIn do
   end
 
   @impl true
-  def handle_call({:stop_midi, midi_pid}, _from, _state) do
+  def handle_call(:stop_midi, _from, %State{midi_pid: midi_pid}) do
     :ok = PortMidi.close(:input, midi_pid)
     {:reply, :ok, %State{}}
   end
