@@ -67,7 +67,7 @@ defmodule MidiIn do
     end
     {:ok, midi_pid} = PortMidi.open(:input, device)
     PortMidi.listen(midi_pid, self())
-    Logger.info("device #{device}, synth #{synth}, note_control #{note_control}")
+    # Logger.info("device #{device}, synth #{synth}, note_control #{note_control}")
     {:reply, {:ok, midi_pid}, %{state |
                                 note_module_id: synth,
                                 control_function: control_function,
@@ -77,7 +77,7 @@ defmodule MidiIn do
 
   @impl true
   def handle_call({:register_cc, cc_num, cc_id, cc_control}, _from, %State{cc_registry: cc_registry} = state) do
-    Logger.info("cc_num #{cc_num} cc #{cc_id}, cc_control #{cc_control}")
+    # Logger.info("cc_num #{cc_num} cc #{cc_id}, cc_control #{cc_control}")
 
     cc_specs = Map.get(cc_registry, cc_num, [])
 
@@ -87,8 +87,10 @@ defmodule MidiIn do
 
   @impl true
   def handle_call(:stop_midi, _from, %State{midi_pid: midi_pid}) do
-    :ok = PortMidi.close(:input, midi_pid)
-    {:reply, :ok, %State{}}
+    if midi_pid != 0 do
+      PortMidi.close(:input, midi_pid)
+    end
+    {:reply, :ok, %State{midi_pid: 0}}
   end
 
 
@@ -120,14 +122,7 @@ defmodule MidiIn do
           last_note
 
         (status >= 0xB0) && (status < 0xC0) ->
-            cc_list = Map.get(state.cc_registry, note, 0)
-            if cc_list == 0 do
-              Logger.info("cc message #{Integer.to_string(note, 16)} val #{vel} not handled")
-            else
-              Enum.each(cc_list, fn %MidiIn.CC{cc_id: cc_id, cc_control: cc_control} ->
-                set_control.(cc_id, cc_control, vel / 127)
-              end)
-            end
+          set_vol(state, note, vel, set_control)
           last_note
 
         (status >= 0xC0) && (status < 0xD0) ->
@@ -135,7 +130,7 @@ defmodule MidiIn do
           last_note
 
         (status >= 0xD0) && (status < 0xE0) ->
-          Logger.warn("unexpected aftertouch_message note #{note} #{vel}")
+          set_vol(state, 2, note, set_control)
           last_note
 
         (status >= 0xE0) && (status < 0xF0) ->
@@ -155,6 +150,16 @@ defmodule MidiIn do
     %State{state | last_note: new_note}
   end
 
+  def set_vol(state, note, vel, set_control) do
+    cc_list = Map.get(state.cc_registry, note, 0)
+    if cc_list == 0 do
+      Logger.info("cc message #{Integer.to_string(note, 16)} val #{vel} not handled")
+    else
+      Enum.each(cc_list, fn %MidiIn.CC{cc_id: cc_id, cc_control: cc_control} ->
+        set_control.(cc_id, cc_control, vel / 127)
+      end)
+    end
+  end
   ###########################################################
   # test functions
   ###########################################################
