@@ -109,9 +109,9 @@ defmodule MidiIn do
           Logger.warn("unexpected noteoff message")
           last_note
         (status >= 0x90) && (status < 0xA0) ->
-        if state.note_module_id != 0 do
+        if state.note_module_id != 0 and vel != 0 do
           set_control.(state.note_module_id, state.note_control, note)
-          #Logger.info("note #{note} vel #{vel} synth #{state.note_module_id} control #{state.note_control}")
+          # Logger.info("note #{note} vel #{vel} synth #{state.note_module_id} control #{state.note_control}")
           note
         else
           last_note
@@ -176,4 +176,17 @@ defmodule MidiIn do
   # """
 
   ###########################################################
+
+  def my_set_control(id, control, val) do
+    case control do
+      "me" -> Logger.info("id: #{id} control: #{control} val: #{val}")
+      _ -> nil
+    end
+  end
+
+  def tm() do
+    {:ok, _pid} = MidiInClient.start_midi(1, "me", &my_set_control/3)
+    MidiInClient.register_cc(2, 1, "amp")
+  end
+
 end

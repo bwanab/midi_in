@@ -23,7 +23,8 @@ defmodule MidiIn.MixProject do
   # Run "mix help deps" to learn about dependencies.
   defp deps do
     [
-      {:portmidi, git: "https://github.com/bwanab/ex-portmidi.git"}
+      # {:portmidi, git: "https://github.com/bwanab/ex-portmidi.git"}
+      {:portmidi, path: "../ex-portmidi"}
     ]
   end
 end
