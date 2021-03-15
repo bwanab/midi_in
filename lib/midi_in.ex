@@ -11,12 +11,14 @@ defmodule MidiIn.State do
     note_control: "",
     control_function: nil,
     cc_registry: %{},
+    gate_registry: [],
     midi_pid: 0,
     last_note: 0
   @type t :: %__MODULE__{note_module_id: integer,
                          note_control: String.t,
                          control_function: function,
                          cc_registry: map,
+                         gate_registry: list,
                          midi_pid: integer,
                          last_note: integer
   }
@@ -86,13 +88,27 @@ defmodule MidiIn do
   end
 
   @impl true
+  def handle_call({:register_gate, id}, _from, %State{gate_registry: gate_registry} = state) do
+    gate_registry = [id|gate_registry]
+    Logger.info("gate_registry: #{inspect(gate_registry)}")
+    {:reply, :ok,
+     %{state | gate_registry: gate_registry}}
+  end
+
+  @impl true
   def handle_call(:stop_midi, _from, %State{midi_pid: midi_pid}) do
     if midi_pid != 0 do
       PortMidi.close(:input, midi_pid)
     end
-    {:reply, :ok, %State{midi_pid: 0}}
+    {:reply, :ok, %State{midi_pid: 0, gate_registry: []}}
   end
 
+  @impl true
+  def handle_info({:open_gate, id}, %State{control_function: set_control} = state) do
+    set_control.(id, "gate", 1)
+    Logger.info("set control #{id} gate 1")
+    {:noreply, state}
+  end
 
   @impl true
   def handle_info({_pid, messages}, state) do
@@ -100,10 +116,11 @@ defmodule MidiIn do
     {:noreply, Enum.reduce(messages, state, fn m, acc -> process_message(m, acc) end)}
   end
 
+
   @doc """
   processes the message and returns a possibly new state
   """
-  def process_message({{status, note, vel}, _timestamp}, %State{control_function: set_control, last_note: last_note} = state) do
+  def process_message({{status, note, vel}, _timestamp}, %State{control_function: set_control, last_note: last_note, gate_registry: gate_registry} = state) do
     new_note = cond do
         (status >= 0x80) && (status < 0x90) ->
           Logger.warn("unexpected noteoff message")
@@ -111,6 +128,11 @@ defmodule MidiIn do
         (status >= 0x90) && (status < 0xA0) ->
         if state.note_module_id != 0 and vel != 0 do
           set_control.(state.note_module_id, state.note_control, note)
+          Enum.each(gate_registry, fn g ->
+            set_control.(g, "gate", 0)
+            Logger.info("set control #{g} gate 0")
+            Process.send_after(self(), {:open_gate, g}, 50)
+          end)
           # Logger.info("note #{note} vel #{vel} synth #{state.note_module_id} control #{state.note_control}")
           note
         else
