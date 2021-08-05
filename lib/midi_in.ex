@@ -112,7 +112,7 @@ defmodule MidiIn do
 
   @impl true
   def handle_info({_pid, messages}, state) do
-    # Logger.info("midi_in messages #{inspect(messages)}")
+    Logger.info("#{inspect(messages)}")
     {:noreply, Enum.reduce(messages, state, fn m, acc -> process_message(m, acc) end)}
   end
 
@@ -120,7 +120,9 @@ defmodule MidiIn do
   @doc """
   processes the message and returns a possibly new state
   """
-  def process_message({{status, note, vel}, _timestamp}, %State{control_function: set_control, last_note: last_note, gate_registry: gate_registry} = state) do
+  def process_message({{status, note, vel}, _timestamp}, %State{control_function: set_control,
+                                                                last_note: last_note,
+                                                                gate_registry: gate_registry} = state) do
     new_note = cond do
         (status >= 0x80) && (status < 0x90) ->
           Logger.warn("unexpected noteoff message")

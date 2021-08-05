@@ -11,6 +11,10 @@ defmodule MidiInClient do
     GenServer.call(MidiIn, {:register_gate, id})
   end
 
+  def register_gate(pid, id) do
+    GenServer.call(pid, {:register_gate, id})
+  end
+
   def stop_midi() do
     GenServer.call(MidiIn, :stop_midi)
   end
