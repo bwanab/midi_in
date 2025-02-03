@@ -67,24 +67,35 @@ defmodule MidiIn do
     if old_pid != 0 do
       :ok = PortMidi.close(:input, old_pid)
     end
-    {:ok, midi_pid} = PortMidi.open(:input, device)
-    PortMidi.listen(midi_pid, self())
-    # Logger.info("device #{device}, synth #{synth}, note_control #{note_control}")
-    {:reply, {:ok, midi_pid}, %{state |
-                                note_module_id: synth,
-                                control_function: control_function,
-                                note_control: note_control,
-                                midi_pid: midi_pid}}
+    Logger.debug("before Portmidi.open")
+    case PortMidi.open(:input, device) do
+      {:ok, midi_pid} ->
+        Logger.debug("before PortMidi.listen") # midi_pid = #{midi_pid}")
+        PortMidi.listen(midi_pid, self())
+        # Logger.info("device #{device}, synth #{synth}, note_control #{note_control}")
+        {:reply, {:ok, midi_pid}, %{state |
+                                    note_module_id: synth,
+                                    control_function: control_function,
+                                    note_control: note_control,
+                                    midi_pid: midi_pid}}
+      {:error, reason} ->
+        Logger.warning("Midi device #{device} not found because #{reason}")
+        {:reply, {:error, reason}, %{state | midi_pid: 0}}
+      end
   end
 
   @impl true
-  def handle_call({:register_cc, cc_num, cc_id, cc_control}, _from, %State{cc_registry: cc_registry} = state) do
-    # Logger.info("cc_num #{cc_num} cc #{cc_id}, cc_control #{cc_control}")
+  def handle_call({:register_cc, cc_num, cc_id, cc_control}, _from, %State{cc_registry: cc_registry, midi_pid: midi_pid} = state) do
+    Logger.info("cc_num #{cc_num} cc #{cc_id}, cc_control #{cc_control}")
 
-    cc_specs = Map.get(cc_registry, cc_num, [])
+    case midi_pid do
+    0 -> {:reply, :no_midi, state}
+    _pid ->
+      cc_specs = Map.get(cc_registry, cc_num, [])
 
-    {:reply, :ok,
-     %{state | cc_registry: Map.put(cc_registry, cc_num, cc_specs ++ [%MidiIn.CC{cc_id: cc_id, cc_control: cc_control}])}}
+      {:reply, :ok,
+       %{state | cc_registry: Map.put(cc_registry, cc_num, cc_specs ++ [%MidiIn.CC{cc_id: cc_id, cc_control: cc_control}])}}
+    end
   end
 
   @impl true
@@ -97,6 +108,7 @@ defmodule MidiIn do
 
   @impl true
   def handle_call(:stop_midi, _from, %State{midi_pid: midi_pid}) do
+    Logger.debug("midi_pid: #{inspect(midi_pid)}")
     if midi_pid != 0 do
       PortMidi.close(:input, midi_pid)
     end
@@ -112,7 +124,7 @@ defmodule MidiIn do
 
   @impl true
   def handle_info({_pid, messages}, state) do
-    Logger.info("#{inspect(messages)}")
+    Logger.debug("#{inspect(messages)}")
     {:noreply, Enum.reduce(messages, state, fn m, acc -> process_message(m, acc) end)}
   end
 
@@ -125,7 +137,7 @@ defmodule MidiIn do
                                                                 gate_registry: gate_registry} = state) do
     new_note = cond do
         (status >= 0x80) && (status < 0x90) ->
-          Logger.warn("unexpected noteoff message")
+          Logger.warning("unexpected noteoff message")
           last_note
         (status >= 0x90) && (status < 0xA0) ->
         if state.note_module_id != 0 and vel != 0 do
@@ -142,7 +154,7 @@ defmodule MidiIn do
         end
 
         (status >= 0xA0) && (status < 0xB0) ->
-          Logger.warn("unexpected polyphonic touch message")
+          Logger.warning("unexpected polyphonic touch message")
           last_note
 
         (status >= 0xB0) && (status < 0xC0) ->
@@ -168,7 +180,7 @@ defmodule MidiIn do
           last_note
 
         status == 0xF0 ->
-          Logger.warn("unexpected sysex_message")
+          Logger.warning("unexpected sysex_message")
           last_note
     end
     %State{state | last_note: new_note}
