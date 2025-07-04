@@ -12,14 +12,16 @@ defmodule MidiIn.State do
     control_function: nil,
     cc_registry: %{},
     gate_registry: [],
-    midi_pid: 0,
+    listener_pid: nil,
+    input_port: nil,
     last_note: 0
   @type t :: %__MODULE__{note_module_id: integer,
                          note_control: String.t,
                          control_function: function,
                          cc_registry: map,
                          gate_registry: list,
-                         midi_pid: integer,
+                         listener_pid: pid | nil,
+                         input_port: %Midiex.MidiPort{} | nil,
                          last_note: integer
   }
 end
@@ -32,6 +34,25 @@ defmodule MidiIn do
   import Bitwise
   require Logger
   alias MidiIn.State
+  alias Midiex.Listener
+
+  @doc """
+  Find a MIDI port by regex pattern and type.
+  """
+  @spec get_port(binary(), :input | :output) :: {:ok, %Midiex.MidiPort{}} | {:error, binary()}
+  def get_port(regex_string, type) do
+    case Regex.compile(regex_string) do
+      {:ok, regex} ->
+        ports = Midiex.ports(regex, type)
+        if length(ports) < 1 do
+          {:error, "No #{type} port matching '#{regex_string}' found"}
+        else
+          {:ok, List.first(ports)}
+        end
+      {:error, reason} -> 
+        {:error, "Invalid regex '#{regex_string}': #{inspect(reason)}"}
+    end
+  end
 
   @impl true
   def start(_type, _args) do
@@ -63,38 +84,52 @@ defmodule MidiIn do
   end
 
   @impl true
-  def handle_call({:start_midi, device, synth, note_control, control_function}, _from, %State{midi_pid: old_pid} = state) do
-    if old_pid != 0 do
-      :ok = PortMidi.close(:input, old_pid)
+  def handle_call({:start_midi, device_regex, synth, note_control, control_function}, _from, %State{listener_pid: old_listener_pid, input_port: old_input_port} = state) do
+    # Stop previous MIDI connection if exists
+    if old_listener_pid != nil and old_input_port != nil do
+      Listener.unsubscribe(old_listener_pid, old_input_port)
     end
-    Logger.debug("before Portmidi.open")
-    case PortMidi.open(:input, device) do
-      {:ok, midi_pid} ->
-        Logger.debug("before PortMidi.listen") # midi_pid = #{midi_pid}")
-        PortMidi.listen(midi_pid, self())
-        # Logger.info("device #{device}, synth #{synth}, note_control #{note_control}")
-        {:reply, {:ok, midi_pid}, %{state |
-                                    note_module_id: synth,
-                                    control_function: control_function,
-                                    note_control: note_control,
-                                    midi_pid: midi_pid}}
+    
+    Logger.debug("Finding MIDI input port: #{device_regex}")
+    case get_port(device_regex, :input) do
+      {:ok, input_port} ->
+        Logger.debug("Starting Midiex listener for port: #{input_port.name}")
+        case Listener.start_link(port: input_port) do
+          {:ok, listener_pid} ->
+            # Create handler function that sends messages to this GenServer
+            handler_fn = fn msg ->
+              send(self(), {:midi_message, msg})
+            end
+            
+            Listener.add_handler(listener_pid, handler_fn)
+            
+            {:reply, {:ok, listener_pid}, %{state |
+                                            note_module_id: synth,
+                                            control_function: control_function,
+                                            note_control: note_control,
+                                            listener_pid: listener_pid,
+                                            input_port: input_port}}
+          {:error, reason} ->
+            Logger.warning("Failed to start MIDI listener: #{inspect(reason)}")
+            {:reply, {:error, "Failed to start listener: #{inspect(reason)}"}, state}
+        end
       {:error, reason} ->
-        Logger.warning("Midi device #{device} not found because #{reason}")
-        {:reply, {:error, reason}, %{state | midi_pid: 0}}
-      end
+        Logger.warning("MIDI device matching '#{device_regex}' not found: #{reason}")
+        {:reply, {:error, reason}, %{state | listener_pid: nil, input_port: nil}}
+    end
   end
 
   @impl true
-  def handle_call({:register_cc, cc_num, cc_id, cc_control}, _from, %State{cc_registry: cc_registry, midi_pid: midi_pid} = state) do
+  def handle_call({:register_cc, cc_num, cc_id, cc_control}, _from, %State{cc_registry: cc_registry, listener_pid: listener_pid} = state) do
     Logger.info("cc_num #{cc_num} cc #{cc_id}, cc_control #{cc_control}")
 
-    case midi_pid do
-    0 -> {:reply, :no_midi, state}
-    _pid ->
-      cc_specs = Map.get(cc_registry, cc_num, [])
+    case listener_pid do
+      nil -> {:reply, :no_midi, state}
+      _pid ->
+        cc_specs = Map.get(cc_registry, cc_num, [])
 
-      {:reply, :ok,
-       %{state | cc_registry: Map.put(cc_registry, cc_num, cc_specs ++ [%MidiIn.CC{cc_id: cc_id, cc_control: cc_control}])}}
+        {:reply, :ok,
+         %{state | cc_registry: Map.put(cc_registry, cc_num, cc_specs ++ [%MidiIn.CC{cc_id: cc_id, cc_control: cc_control}])}}
     end
   end
 
@@ -107,12 +142,12 @@ defmodule MidiIn do
   end
 
   @impl true
-  def handle_call(:stop_midi, _from, %State{midi_pid: midi_pid}) do
-    Logger.debug("midi_pid: #{inspect(midi_pid)}")
-    if midi_pid != 0 do
-      PortMidi.close(:input, midi_pid)
+  def handle_call(:stop_midi, _from, %State{listener_pid: listener_pid, input_port: input_port}) do
+    Logger.debug("listener_pid: #{inspect(listener_pid)}, input_port: #{inspect(input_port)}")
+    if listener_pid != nil and input_port != nil do
+      Listener.unsubscribe(listener_pid, input_port)
     end
-    {:reply, :ok, %State{midi_pid: 0, gate_registry: []}}
+    {:reply, :ok, %State{listener_pid: nil, input_port: nil, gate_registry: []}}
   end
 
   @impl true
@@ -123,9 +158,19 @@ defmodule MidiIn do
   end
 
   @impl true
-  def handle_info({_pid, messages}, state) do
-    Logger.debug("#{inspect(messages)}")
-    {:noreply, Enum.reduce(messages, state, fn m, acc -> process_message(m, acc) end)}
+  def handle_info({:midi_message, msg}, state) do
+    # Convert Midiex message format to expected format
+    # Midiex msg has .data (list of bytes) and .timestamp
+    # Convert to {{status, data1, data2}, timestamp} format expected by process_message
+    midi_message = case msg.data do
+      [status] -> {{status, 0, 0}, msg.timestamp}
+      [status, data1] -> {{status, data1, 0}, msg.timestamp}  
+      [status, data1, data2 | _] -> {{status, data1, data2}, msg.timestamp}
+      [] -> {{0, 0, 0}, msg.timestamp}  # Should not happen but handle gracefully
+    end
+    
+    Logger.debug("MIDI message: #{inspect(midi_message)}")
+    {:noreply, process_message(midi_message, state)}
   end
 
 
@@ -181,6 +226,10 @@ defmodule MidiIn do
 
         status == 0xF0 ->
           Logger.warning("unexpected sysex_message")
+          last_note
+
+        true ->
+          Logger.warning("unknown MIDI status byte: #{Integer.to_string(status, 16)}")
           last_note
     end
     %State{state | last_note: new_note}

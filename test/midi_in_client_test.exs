@@ -53,9 +53,9 @@ defmodule MidiInClientTest do
       assert result == :no_midi
     end
 
-    test "registers CC with mock midi_pid" do
-      # Set up state with a mock midi_pid
-      state = %MidiIn.State{midi_pid: :mock_pid}
+    test "registers CC with mock listener_pid" do
+      # Set up state with a mock listener_pid
+      state = %MidiIn.State{listener_pid: :mock_listener_pid}
       :sys.replace_state(MidiIn, fn _ -> state end)
       
       result = MidiInClient.register_cc(7, 1, "volume")
@@ -68,8 +68,8 @@ defmodule MidiInClientTest do
     end
 
     test "registers multiple CCs for same number" do
-      # Set up state with a mock midi_pid
-      state = %MidiIn.State{midi_pid: :mock_pid}
+      # Set up state with a mock listener_pid
+      state = %MidiIn.State{listener_pid: :mock_listener_pid}
       :sys.replace_state(MidiIn, fn _ -> state end)
       
       MidiInClient.register_cc(7, 1, "volume")
@@ -80,8 +80,8 @@ defmodule MidiInClientTest do
     end
 
     test "registers CCs for different numbers" do
-      # Set up state with a mock midi_pid
-      state = %MidiIn.State{midi_pid: :mock_pid}
+      # Set up state with a mock listener_pid
+      state = %MidiIn.State{listener_pid: :mock_listener_pid}
       :sys.replace_state(MidiIn, fn _ -> state end)
       
       MidiInClient.register_cc(7, 1, "volume")
@@ -141,7 +141,8 @@ defmodule MidiInClientTest do
       assert result == :ok
       
       state = :sys.get_state(MidiIn)
-      assert state.midi_pid == 0
+      assert state.listener_pid == nil
+      assert state.input_port == nil
       assert state.gate_registry == []
     end
 
@@ -159,7 +160,8 @@ defmodule MidiInClientTest do
       
       # Verify state is reset
       new_state = :sys.get_state(MidiIn)
-      assert new_state.midi_pid == 0
+      assert new_state.listener_pid == nil
+      assert new_state.input_port == nil
       assert new_state.gate_registry == []
     end
   end
@@ -189,7 +191,7 @@ defmodule MidiInClientTest do
     test "workflow with mocked MIDI connection" do
       # Mock a successful MIDI connection
       state = %MidiIn.State{
-        midi_pid: :mock_pid,
+        listener_pid: :mock_listener_pid,
         note_module_id: 1,
         note_control: "freq",
         control_function: mock_control_function_for(self())

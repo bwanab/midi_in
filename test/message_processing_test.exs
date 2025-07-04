@@ -216,7 +216,7 @@ defmodule MessageProcessingTest do
       cc_registry = %{7 => [%MidiIn.CC{cc_id: 1, cc_control: "volume"}]}
       state = create_test_state(%{cc_registry: cc_registry})
 
-      MidiIn.set_vol(state, 7, 127, &mock_control_function/3)
+      MidiIn.set_vol(state, 7, 127, mock_control_function_for(self()))
 
       assert_control_called(1, "volume", 1.0)
     end
@@ -228,7 +228,7 @@ defmodule MessageProcessingTest do
       ]}
       state = create_test_state(%{cc_registry: cc_registry})
 
-      MidiIn.set_vol(state, 7, 64, &mock_control_function/3)
+      MidiIn.set_vol(state, 7, 64, mock_control_function_for(self()))
 
       assert_control_called(1, "volume", 64/127)
       assert_control_called(2, "gain", 64/127)
@@ -237,7 +237,7 @@ defmodule MessageProcessingTest do
     test "does nothing for unregistered CC" do
       state = create_test_state(%{cc_registry: %{}})
 
-      MidiIn.set_vol(state, 7, 64, &mock_control_function/3)
+      MidiIn.set_vol(state, 7, 64, mock_control_function_for(self()))
 
       assert_no_control_calls()
     end
@@ -246,12 +246,12 @@ defmodule MessageProcessingTest do
       cc_registry = %{7 => [%MidiIn.CC{cc_id: 1, cc_control: "volume"}]}
       state = create_test_state(%{cc_registry: cc_registry})
 
-      MidiIn.set_vol(state, 7, 0, &mock_control_function/3)
+      MidiIn.set_vol(state, 7, 0, mock_control_function_for(self()))
       assert_control_called(1, "volume", 0.0)
 
       flush_control_calls()
 
-      MidiIn.set_vol(state, 7, 127, &mock_control_function/3)
+      MidiIn.set_vol(state, 7, 127, mock_control_function_for(self()))
       assert_control_called(1, "volume", 1.0)
     end
   end

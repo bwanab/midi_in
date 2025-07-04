@@ -21,13 +21,14 @@ defmodule MidiInTest do
       assert state.control_function == nil
       assert state.cc_registry == %{}
       assert state.gate_registry == []
-      assert state.midi_pid == 0
+      assert state.listener_pid == nil
+      assert state.input_port == nil
       assert state.last_note == 0
     end
 
     test "handle_call :stop terminates GenServer", %{pid: pid} do
-      # Get the state before stopping
-      state_before = :sys.get_state(pid)
+      # Get the state before stopping (not used, just verify it exists)
+      _state_before = :sys.get_state(pid)
       
       # The :stop call should terminate the GenServer
       catch_exit(GenServer.call(pid, :stop))
@@ -39,8 +40,8 @@ defmodule MidiInTest do
 
   describe "register_cc functionality" do
     test "registers CC control successfully", %{pid: pid} do
-      # Set up mock midi_pid to allow CC registration
-      state = %MidiIn.State{midi_pid: :mock_pid}
+      # Set up mock listener_pid to allow CC registration
+      state = %MidiIn.State{listener_pid: :mock_listener_pid}
       :sys.replace_state(pid, fn _ -> state end)
       
       result = GenServer.call(pid, {:register_cc, 7, 1, "volume"})
@@ -56,8 +57,8 @@ defmodule MidiInTest do
     end
 
     test "registers multiple CCs for same number", %{pid: pid} do
-      # Set up mock midi_pid to allow CC registration
-      state = %MidiIn.State{midi_pid: :mock_pid}
+      # Set up mock listener_pid to allow CC registration
+      state = %MidiIn.State{listener_pid: :mock_listener_pid}
       :sys.replace_state(pid, fn _ -> state end)
       
       GenServer.call(pid, {:register_cc, 7, 1, "volume"})
@@ -72,8 +73,8 @@ defmodule MidiInTest do
     end
 
     test "registers CCs for different numbers", %{pid: pid} do
-      # Set up mock midi_pid to allow CC registration
-      state = %MidiIn.State{midi_pid: :mock_pid}
+      # Set up mock listener_pid to allow CC registration
+      state = %MidiIn.State{listener_pid: :mock_listener_pid}
       :sys.replace_state(pid, fn _ -> state end)
       
       GenServer.call(pid, {:register_cc, 7, 1, "volume"})
@@ -87,7 +88,7 @@ defmodule MidiInTest do
     end
 
     test "register_cc with no midi returns :no_midi", %{pid: pid} do
-      # midi_pid is 0 by default
+      # listener_pid is nil by default
       result = GenServer.call(pid, {:register_cc, 7, 1, "volume"})
       assert result == :no_midi
     end
@@ -135,7 +136,8 @@ defmodule MidiInTest do
       
       # Check state is reset
       state = :sys.get_state(pid)
-      assert state.midi_pid == 0
+      assert state.listener_pid == nil
+      assert state.input_port == nil
       assert state.gate_registry == []
     end
   end
@@ -149,14 +151,15 @@ defmodule MidiInTest do
         control_function: mock_control_function_for(self()),
         cc_registry: %{},
         gate_registry: [],
-        midi_pid: 0,
+        listener_pid: nil,
+        input_port: nil,
         last_note: 60
       }
       :sys.replace_state(pid, fn _ -> state end)
       
-      # Send a note on message
-      message = note_on_message(60, 127)
-      send(pid, {:mock_pid, [message]})
+      # Send a note on message in Midiex format
+      message = midiex_note_on_message(60, 127)
+      send(pid, {:midi_message, message})
       
       # Allow message processing
       Process.sleep(10)
@@ -176,17 +179,18 @@ defmodule MidiInTest do
         control_function: mock_control_function_for(self()),
         cc_registry: cc_registry,
         gate_registry: [],
-        midi_pid: 0,
+        listener_pid: nil,
+        input_port: nil,
         last_note: 60
       }
       :sys.replace_state(pid, fn _ -> state end)
       
-      # Send multiple messages
-      messages = [
-        note_on_message(60, 127),
-        cc_message(7, 64)
-      ]
-      send(pid, {:mock_pid, messages})
+      # Send multiple messages in Midiex format (individually)
+      note_message = midiex_note_on_message(60, 127)
+      cc_message_midi = midiex_cc_message(7, 64)
+      
+      send(pid, {:midi_message, note_message})
+      send(pid, {:midi_message, cc_message_midi})
       
       # Allow message processing
       Process.sleep(10)
@@ -206,7 +210,8 @@ defmodule MidiInTest do
         note_control: "freq",
         cc_registry: %{},
         gate_registry: [],
-        midi_pid: 0,
+        listener_pid: nil,
+        input_port: nil,
         last_note: 60
       }
       :sys.replace_state(pid, fn _ -> state end)
@@ -245,7 +250,8 @@ defmodule MidiInTest do
       assert state.control_function == nil
       assert state.cc_registry == %{}
       assert state.gate_registry == []
-      assert state.midi_pid == 0
+      assert state.listener_pid == nil
+      assert state.input_port == nil
       assert state.last_note == 0
     end
 

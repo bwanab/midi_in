@@ -45,7 +45,8 @@ defmodule TestHelper do
       control_function: mock_control_function_for(self()),
       cc_registry: %{},
       gate_registry: [],
-      midi_pid: 0,
+      listener_pid: nil,
+      input_port: nil,
       last_note: 60
     }
     
@@ -53,10 +54,24 @@ defmodule TestHelper do
   end
 
   @doc """
-  Creates a MIDI message tuple for testing.
+  Creates a MIDI message tuple for testing (legacy format).
   """
   def create_midi_message(status, data1, data2, timestamp \\ 0) do
     {{status, data1, data2}, timestamp}
+  end
+
+  @doc """
+  Creates a Midiex-style MIDI message for testing.
+  """
+  def create_midiex_message(status, data1, data2, timestamp \\ 0) do
+    %{data: [status, data1, data2], timestamp: timestamp}
+  end
+
+  @doc """
+  Creates a Midiex-style MIDI message with variable data length.
+  """
+  def create_midiex_message(data_list, timestamp \\ 0) when is_list(data_list) do
+    %{data: data_list, timestamp: timestamp}
   end
 
   @doc """
@@ -85,6 +100,34 @@ defmodule TestHelper do
   def program_change_message(program, channel \\ 0) do
     status = 0xC0 + channel
     create_midi_message(status, program, 0)
+  end
+
+  @doc """
+  Creates common Midiex MIDI messages for testing.
+  """
+  def midiex_note_on_message(note, velocity \\ 127, channel \\ 0) do
+    status = 0x90 + channel
+    create_midiex_message(status, note, velocity)
+  end
+
+  def midiex_note_off_message(note, velocity \\ 64, channel \\ 0) do
+    status = 0x80 + channel
+    create_midiex_message(status, note, velocity)
+  end
+
+  def midiex_cc_message(cc_num, value, channel \\ 0) do
+    status = 0xB0 + channel
+    create_midiex_message(status, cc_num, value)
+  end
+
+  def midiex_pitch_bend_message(lsb, msb, channel \\ 0) do
+    status = 0xE0 + channel
+    create_midiex_message(status, lsb, msb)
+  end
+
+  def midiex_program_change_message(program, channel \\ 0) do
+    status = 0xC0 + channel
+    create_midiex_message(status, program, 0)
   end
 
   @doc """
