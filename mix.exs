@@ -5,7 +5,7 @@ defmodule MidiIn.MixProject do
     [
       app: :midi_in,
       version: "0.1.0",
-      elixir: "~> 1.11",
+      elixir: "~> 1.18",
       start_permanent: Mix.env() == :prod,
       deps: deps()
     ]
@@ -14,7 +14,6 @@ defmodule MidiIn.MixProject do
   # Run "mix help compile.app" to learn about applications.
   def application do
     [
-      applications: [:portmidi],
       extra_applications: [:logger],
       mod: {MidiIn, []}
     ]
@@ -24,7 +23,8 @@ defmodule MidiIn.MixProject do
   defp deps do
     [
       # {:portmidi, git: "https://github.com/bwanab/ex-portmidi.git"}
-      {:portmidi, path: "../ex-portmidi"}
+      {:portmidi, path: "../ex-portmidi"},
+      {:mock, "~> 0.3.0", only: :test}
     ]
   end
 end
