@@ -1,5 +1,9 @@
 #!/usr/bin/env elixir
 
+Mix.install([
+  {:midi_in, path: "."}
+])
+
 # Live MIDI Test Script
 # Usage: elixir test_midi_live.exs [device_regex]
 # Example: elixir test_midi_live.exs "AE-30"
@@ -16,28 +20,28 @@ defmodule MidiLiveTest do
     device_regex = case args do
       [device] -> device
       [] -> ".*"  # Match any device
-      _ -> 
+      _ ->
         IO.puts("Usage: elixir test_midi_live.exs [device_regex]")
         System.halt(1)
     end
 
     IO.puts("🎹 MIDI Live Test Starting...")
     IO.puts("=" |> String.duplicate(50))
-    
+
     # Start the application
     Application.ensure_all_started(:midi_in)
-    
+
     # List available MIDI devices
     show_available_devices()
-    
+
     IO.puts("\n🔍 Looking for MIDI device matching: '#{device_regex}'")
-    
+
     # Create a message printer function
     message_printer = fn id, control, value ->
       timestamp = :os.system_time(:millisecond)
       IO.puts("#{timestamp} | Control: id=#{id}, control=#{control}, value=#{value}")
     end
-    
+
     # Start MIDI with the device
     case MidiInClient.start_midi(1, "note", message_printer, device_regex) do
       {:ok, listener_pid} ->
@@ -45,13 +49,13 @@ defmodule MidiLiveTest do
         IO.puts("🎵 Play your MIDI device - messages will appear below:")
         IO.puts("   (Press Ctrl+C to exit)")
         IO.puts("-" |> String.duplicate(50))
-        
+
         # Register some common CCs for testing
         setup_common_ccs()
-        
+
         # Keep the script running
         keep_alive()
-        
+
       {:error, reason} ->
         IO.puts("❌ Failed to connect to MIDI device: #{reason}")
         IO.puts("\n💡 Try:")
@@ -64,9 +68,9 @@ defmodule MidiLiveTest do
 
   defp show_available_devices do
     IO.puts("\n📱 Available MIDI Input Devices:")
-    
+
     case Midiex.ports(:input) do
-      [] -> 
+      [] ->
         IO.puts("   (No MIDI input devices found)")
       ports ->
         ports
@@ -94,21 +98,21 @@ defmodule MidiLiveTest do
       {73, "attack_time"},
       {74, "brightness"}
     ]
-    
+
     Enum.each(common_ccs, fn {cc_num, cc_name} ->
       MidiInClient.register_cc(cc_num, cc_num, cc_name)
     end)
-    
+
     # Register a gate for note on/off messages
     MidiInClient.register_gate(999)
-    
+
     IO.puts("🎛️  Registered common MIDI CCs (volume, modulation, etc.)")
   end
 
   defp keep_alive do
     # Create a simple loop that prints a heartbeat every 30 seconds
     spawn(fn -> heartbeat_loop() end)
-    
+
     # Main process sleeps forever
     Process.sleep(:infinity)
   end

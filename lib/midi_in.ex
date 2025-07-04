@@ -49,7 +49,7 @@ defmodule MidiIn do
         else
           {:ok, List.first(ports)}
         end
-      {:error, reason} -> 
+      {:error, reason} ->
         {:error, "Invalid regex '#{regex_string}': #{inspect(reason)}"}
     end
   end
@@ -89,7 +89,8 @@ defmodule MidiIn do
     if old_listener_pid != nil and old_input_port != nil do
       Listener.unsubscribe(old_listener_pid, old_input_port)
     end
-    
+
+    outer_pid = self()
     Logger.debug("Finding MIDI input port: #{device_regex}")
     case get_port(device_regex, :input) do
       {:ok, input_port} ->
@@ -97,12 +98,13 @@ defmodule MidiIn do
         case Listener.start_link(port: input_port) do
           {:ok, listener_pid} ->
             # Create handler function that sends messages to this GenServer
+            Logger.debug("Listener connected")
             handler_fn = fn msg ->
-              send(self(), {:midi_message, msg})
+              send(outer_pid, {:midi_message, msg})
             end
-            
+
             Listener.add_handler(listener_pid, handler_fn)
-            
+
             {:reply, {:ok, listener_pid}, %{state |
                                             note_module_id: synth,
                                             control_function: control_function,
@@ -164,11 +166,11 @@ defmodule MidiIn do
     # Convert to {{status, data1, data2}, timestamp} format expected by process_message
     midi_message = case msg.data do
       [status] -> {{status, 0, 0}, msg.timestamp}
-      [status, data1] -> {{status, data1, 0}, msg.timestamp}  
+      [status, data1] -> {{status, data1, 0}, msg.timestamp}
       [status, data1, data2 | _] -> {{status, data1, data2}, msg.timestamp}
       [] -> {{0, 0, 0}, msg.timestamp}  # Should not happen but handle gracefully
     end
-    
+
     Logger.debug("MIDI message: #{inspect(midi_message)}")
     {:noreply, process_message(midi_message, state)}
   end

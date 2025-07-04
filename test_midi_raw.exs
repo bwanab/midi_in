@@ -1,5 +1,9 @@
 #!/usr/bin/env elixir
 
+Mix.install([
+  {:midi_in, path: "."}
+])
+
 # Raw MIDI Message Monitor
 # Usage: elixir test_midi_raw.exs [device_regex]
 
@@ -9,25 +13,26 @@ defmodule MidiRawTest do
   Perfect for debugging and understanding MIDI message flow.
   """
 
+  import Bitwise
   require Logger
 
   def main(args \\ []) do
     device_regex = case args do
       [device] -> device
       [] -> ".*"
-      _ -> 
+      _ ->
         IO.puts("Usage: elixir test_midi_raw.exs [device_regex]")
         System.halt(1)
     end
 
     IO.puts("🔬 Raw MIDI Monitor Starting...")
     IO.puts("=" |> String.duplicate(60))
-    
+
     Application.ensure_all_started(:midi_in)
     show_available_devices()
-    
+
     IO.puts("\n🔍 Connecting to device matching: '#{device_regex}'")
-    
+
     case MidiIn.get_port(device_regex, :input) do
       {:ok, input_port} ->
         IO.puts("✅ Found device: #{input_port.name}")
@@ -40,9 +45,9 @@ defmodule MidiRawTest do
 
   defp show_available_devices do
     IO.puts("\n📱 Available MIDI Input Devices:")
-    
+
     case Midiex.ports(:input) do
-      [] -> 
+      [] ->
         IO.puts("   (No MIDI input devices found)")
       ports ->
         ports
@@ -60,17 +65,17 @@ defmodule MidiRawTest do
         IO.puts("   Format: [HEX BYTES] | Message Type | Details")
         IO.puts("   Press Ctrl+C to exit")
         IO.puts("-" |> String.duplicate(60))
-        
+
         # Set up message handler
         handler_fn = fn msg ->
           process_raw_message(msg)
         end
-        
+
         Midiex.Listener.add_handler(listener_pid, handler_fn)
-        
+
         # Keep running
         Process.sleep(:infinity)
-        
+
       {:error, reason} ->
         IO.puts("❌ Failed to start listener: #{inspect(reason)}")
         System.halt(1)
@@ -79,55 +84,54 @@ defmodule MidiRawTest do
 
   defp process_raw_message(msg) do
     timestamp = :os.system_time(:millisecond)
-    hex_bytes = msg.data 
+    hex_bytes = msg.data
                 |> Enum.map(&Integer.to_string(&1, 16))
                 |> Enum.map(&String.pad_leading(&1, 2, "0"))
                 |> Enum.join(" ")
-    
+
     {message_type, details} = decode_midi_message(msg.data)
-    
+
     IO.puts("#{timestamp} | [#{hex_bytes}] | #{message_type} | #{details}")
   end
 
   defp decode_midi_message([status | data]) do
-    channel = status &&& 0x0F
-    message_type = status &&& 0xF0
-    
-    case message_type do
-      0x80 -> 
+    <<message_type::size(4), channel::size(4)>> = <<status>>
+
+    case message_type <<< 4 do
+      0x80 ->
         [note, velocity] = pad_data(data, 2)
         {"Note Off", "Ch#{channel+1} Note#{note} Vel#{velocity}"}
-        
-      0x90 -> 
+
+      0x90 ->
         [note, velocity] = pad_data(data, 2)
         if velocity == 0 do
           {"Note Off", "Ch#{channel+1} Note#{note} (vel=0)"}
         else
           {"Note On", "Ch#{channel+1} Note#{note} Vel#{velocity}"}
         end
-        
-      0xA0 -> 
+
+      0xA0 ->
         [note, pressure] = pad_data(data, 2)
         {"Poly Touch", "Ch#{channel+1} Note#{note} Pressure#{pressure}"}
-        
-      0xB0 -> 
+
+      0xB0 ->
         [cc_num, value] = pad_data(data, 2)
         cc_name = get_cc_name(cc_num)
         {"Control Change", "Ch#{channel+1} CC#{cc_num}(#{cc_name}) Val#{value}"}
-        
-      0xC0 -> 
+
+      0xC0 ->
         [program] = pad_data(data, 1)
         {"Program Change", "Ch#{channel+1} Program#{program}"}
-        
-      0xD0 -> 
+
+      0xD0 ->
         [pressure] = pad_data(data, 1)
         {"Channel Pressure", "Ch#{channel+1} Pressure#{pressure}"}
-        
-      0xE0 -> 
+
+      0xE0 ->
         [lsb, msb] = pad_data(data, 2)
         bend_value = (msb <<< 7) + lsb - 8192
         {"Pitch Bend", "Ch#{channel+1} Value#{bend_value}"}
-        
+
       0xF0 ->
         case status do
           0xF0 -> {"System Exclusive", "SysEx data"}
@@ -144,8 +148,8 @@ defmodule MidiRawTest do
           0xFF -> {"Reset", ""}
           _ -> {"System", "Unknown"}
         end
-        
-      _ -> 
+
+      _ ->
         {"Unknown", "Status: 0x#{Integer.to_string(status, 16)}"}
     end
   end

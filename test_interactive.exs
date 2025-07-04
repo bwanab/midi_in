@@ -1,6 +1,10 @@
 #!/usr/bin/env elixir
 
-# Interactive MidiIn Test Script  
+Mix.install([
+  {:midi_in, path: "."}
+])
+
+# Interactive MidiIn Test Script
 # Usage: elixir test_interactive.exs [device_regex]
 
 defmodule InteractiveMidiTest do
@@ -13,19 +17,19 @@ defmodule InteractiveMidiTest do
     device_regex = case args do
       [device] -> device
       [] -> prompt_for_device()
-      _ -> 
+      _ ->
         IO.puts("Usage: elixir test_interactive.exs [device_regex]")
         System.halt(1)
     end
 
     IO.puts("🎹 Interactive MidiIn Test")
     IO.puts("=" |> String.duplicate(40))
-    
+
     Application.ensure_all_started(:midi_in)
-    
+
     # Show available devices
     show_devices()
-    
+
     # Start the test
     run_interactive_test(device_regex)
   end
@@ -41,14 +45,14 @@ defmodule InteractiveMidiTest do
 
   defp show_devices do
     IO.puts("\n📱 Available MIDI Input Devices:")
-    
+
     ports = Midiex.ports(:input)
     if Enum.empty?(ports) do
       IO.puts("   ❌ No MIDI input devices found!")
       IO.puts("   Make sure your MIDI device is connected.")
       System.halt(1)
     end
-    
+
     ports
     |> Enum.with_index(1)
     |> Enum.each(fn {port, index} ->
@@ -58,20 +62,20 @@ defmodule InteractiveMidiTest do
 
   defp run_interactive_test(device_regex) do
     IO.puts("\n🔍 Connecting to device matching: '#{device_regex}'")
-    
+
     # Create a test control function that prints everything
     control_function = fn id, control, value ->
       timestamp = DateTime.now!("Etc/UTC") |> DateTime.to_time() |> Time.to_string()
       IO.puts("#{timestamp} | 🎛️  Control: ID=#{id}, Control=#{control}, Value=#{value}")
     end
-    
+
     # Start MIDI connection
     case MidiInClient.start_midi(100, "note", control_function, device_regex) do
       {:ok, listener_pid} ->
         IO.puts("✅ Connected! (Listener: #{inspect(listener_pid)})")
         setup_test_environment()
         run_test_loop()
-        
+
       {:error, reason} ->
         IO.puts("❌ Connection failed: #{reason}")
         System.halt(1)
@@ -80,7 +84,7 @@ defmodule InteractiveMidiTest do
 
   defp setup_test_environment do
     IO.puts("\n🎛️  Setting up MIDI environment...")
-    
+
     # Register common MIDI controls
     test_ccs = [
       {1, 101, "modulation"},
@@ -92,18 +96,18 @@ defmodule InteractiveMidiTest do
       {71, 171, "resonance"},
       {74, 174, "brightness"}
     ]
-    
+
     Enum.each(test_ccs, fn {cc_num, id, name} ->
       result = MidiInClient.register_cc(cc_num, id, name)
       IO.puts("   CC#{cc_num} (#{name}) -> ID#{id}: #{result}")
     end)
-    
+
     # Register some gates for note testing
     Enum.each([201, 202, 203], fn gate_id ->
       result = MidiInClient.register_gate(gate_id)
       IO.puts("   Gate #{gate_id}: #{result}")
     end)
-    
+
     IO.puts("\n✅ Environment ready!")
   end
 
@@ -116,20 +120,20 @@ defmodule InteractiveMidiTest do
     IO.puts("   🔄 Press sustain pedal (CC64)")
     IO.puts("\nPress 'h' + Enter for help, 'q' + Enter to quit")
     IO.puts("-" |> String.duplicate(50))
-    
+
     input_loop()
   end
 
   defp input_loop do
     case IO.gets("") |> String.trim() |> String.downcase() do
-      "q" -> 
+      "q" ->
         cleanup_and_exit()
-      "quit" -> 
+      "quit" ->
         cleanup_and_exit()
-      "h" -> 
+      "h" ->
         show_help()
         input_loop()
-      "help" -> 
+      "help" ->
         show_help()
         input_loop()
       "s" ->
@@ -138,7 +142,7 @@ defmodule InteractiveMidiTest do
       "status" ->
         show_status()
         input_loop()
-      "" -> 
+      "" ->
         input_loop()  # Empty input, keep going
       unknown ->
         IO.puts("Unknown command: #{unknown}. Press 'h' for help.")
