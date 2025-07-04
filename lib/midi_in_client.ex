@@ -1,7 +1,7 @@
 defmodule MidiInClient do
   require Logger
-  def start_midi(synth, param, control_function) do
-    GenServer.call(MidiIn, {:start_midi, "mio", synth, param, control_function})
+  def start_midi(synth, param, control_function, device \\ "AE-30") do
+    GenServer.call(MidiIn, {:start_midi, device, synth, param, control_function})
   end
 
   def register_cc(cc_num, cc, control) do

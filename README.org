@@ -32,7 +32,7 @@ The following will allow you to play it:
 #+BEGIN_SRC elixir
 
 id = ScClient.make_module("mySine2", ["amp", 0.2, "note, 55"])
-{:ok, pid} = MidiInClient.start_midi(id, "note", &ScClient.set_control/3)
+{:ok, pid} = MidiInClient.start_midi(id, "note", &ScClient.set_control/3, "AE-30")
 MidiInClient.register_cc(2, id, "amp")
 
 # remember to do this when you want to stop:
