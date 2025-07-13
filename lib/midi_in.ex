@@ -184,20 +184,28 @@ defmodule MidiIn do
                                                                 gate_registry: gate_registry} = state) do
     new_note = cond do
         (status >= 0x80) && (status < 0x90) ->
-          Logger.warning("unexpected noteoff message")
-          last_note
-        (status >= 0x90) && (status < 0xA0) ->
-        if state.note_module_id != 0 and vel != 0 do
-          set_control.(state.note_module_id, state.note_control, note)
+          ######################
+          ## Experimental! I'm not sure if this is the right idea. I've previously been ignoring
+          ## note off messages, but I don't think that's right.
           Enum.each(gate_registry, fn g ->
             set_control.(g, "gate", 0)
             Logger.info("set control #{g} gate 0")
-            Process.send_after(self(), {:open_gate, g}, 50)
           end)
+          #######################
           # Logger.info("note #{note} vel #{vel} synth #{state.note_module_id} control #{state.note_control}")
-          note
-        else
           last_note
+        (status >= 0x90) && (status < 0xA0) ->
+          if state.note_module_id != 0 and vel != 0 do
+            set_control.(state.note_module_id, state.note_control, note)
+            Enum.each(gate_registry, fn g ->
+              set_control.(g, "gate", 0)
+              Logger.info("set control #{g} gate 0")
+              Process.send_after(self(), {:open_gate, g}, 50)
+            end)
+            # Logger.info("note #{note} vel #{vel} synth #{state.note_module_id} control #{state.note_control}")
+            note
+          else
+            last_note
         end
 
         (status >= 0xA0) && (status < 0xB0) ->
@@ -209,7 +217,10 @@ defmodule MidiIn do
           last_note
 
         (status >= 0xC0) && (status < 0xD0) ->
-          Logger.info("pc message #{Integer.to_string(note, 16)} val #{vel} not handled")# program_change
+          #IO.inspect(note, label: "cc in")
+          #if note != 11 do
+            Logger.info("pc message #{Integer.to_string(note, 16)} val #{vel} not handled")# program_change
+          #end
           last_note
 
         (status >= 0xD0) && (status < 0xE0) ->
@@ -240,7 +251,9 @@ defmodule MidiIn do
   def set_vol(state, note, vel, set_control) do
     cc_list = Map.get(state.cc_registry, note, 0)
     if cc_list == 0 do
-      Logger.info("cc message #{Integer.to_string(note, 16)} val #{vel} not handled")
+      if note != 11 do
+        Logger.info("cc message #{Integer.to_string(note, 16)} val #{vel} not handled")
+      end
     else
       Enum.each(cc_list, fn %MidiIn.CC{cc_id: cc_id, cc_control: cc_control} ->
         set_control.(cc_id, cc_control, vel / 127)
