@@ -17,11 +17,11 @@ defmodule MidiInClient do
   end
 
   def stop_midi() do
-    if Logger.level() == :debug do
-      Logger.debug("In stop_midi")
-      stacktrace = Process.info(self(), :current_stacktrace)
-      IO.inspect(stacktrace)
-    end
+    # if Logger.level() == :debug do
+    #   Logger.debug("In stop_midi")
+    #   stacktrace = Process.info(self(), :current_stacktrace)
+    #   IO.inspect(stacktrace)
+    # end
     GenServer.call(MidiIn, :stop_midi)
   end
 end

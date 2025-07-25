@@ -145,7 +145,7 @@ defmodule MidiIn do
 
   @impl true
   def handle_call(:stop_midi, _from, %State{listener_pid: listener_pid, input_port: input_port}) do
-    Logger.debug("listener_pid: #{inspect(listener_pid)}, input_port: #{inspect(input_port)}")
+    Logger.debug("stop midi listener_pid: #{inspect(listener_pid)}, input_port: #{inspect(input_port)}")
     if listener_pid != nil and input_port != nil do
       Listener.unsubscribe(listener_pid, input_port)
     end
@@ -154,8 +154,10 @@ defmodule MidiIn do
 
   @impl true
   def handle_info({:open_gate, id}, %State{control_function: set_control} = state) do
-    set_control.(id, "gate", 1)
-    Logger.info("set control #{id} gate 1")
+    if set_control do
+      set_control.(id, "gate", 1)
+      Logger.info("set control #{id} gate 1")
+    end
     {:noreply, state}
   end
 
@@ -190,6 +192,7 @@ defmodule MidiIn do
           Enum.each(gate_registry, fn g ->
             set_control.(g, "gate", 0)
             Logger.info("set control #{g} gate 0")
+            Process.send_after(self(), {:open_gate, g}, 50)
           end)
           #######################
           # Logger.info("note #{note} vel #{vel} synth #{state.note_module_id} control #{state.note_control}")
@@ -197,11 +200,11 @@ defmodule MidiIn do
         (status >= 0x90) && (status < 0xA0) ->
           if state.note_module_id != 0 and vel != 0 do
             set_control.(state.note_module_id, state.note_control, note)
-            Enum.each(gate_registry, fn g ->
-              set_control.(g, "gate", 0)
-              Logger.info("set control #{g} gate 0")
-              Process.send_after(self(), {:open_gate, g}, 50)
-            end)
+            # Enum.each(gate_registry, fn g ->
+            #   set_control.(g, "gate", 0)
+            #   Logger.info("set control #{g} gate 0")
+            #   Process.send_after(self(), {:open_gate, g}, 50)
+            # end)
             # Logger.info("note #{note} vel #{vel} synth #{state.note_module_id} control #{state.note_control}")
             note
           else
