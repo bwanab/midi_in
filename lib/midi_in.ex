@@ -192,7 +192,7 @@ defmodule MidiIn do
           Enum.each(gate_registry, fn g ->
             set_control.(g, "gate", 0)
             Logger.info("set control #{g} gate 0")
-            Process.send_after(self(), {:open_gate, g}, 50)
+            #Process.send_after(self(), {:open_gate, g}, 50)
           end)
           #######################
           # Logger.info("note #{note} vel #{vel} synth #{state.note_module_id} control #{state.note_control}")
@@ -200,6 +200,10 @@ defmodule MidiIn do
         (status >= 0x90) && (status < 0xA0) ->
           if state.note_module_id != 0 and vel != 0 do
             set_control.(state.note_module_id, state.note_control, note)
+            Enum.each(gate_registry, fn g ->
+              set_control.(g, "gate", 1)
+            end)
+
             # Enum.each(gate_registry, fn g ->
             #   set_control.(g, "gate", 0)
             #   Logger.info("set control #{g} gate 0")
